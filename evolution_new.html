@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evolution</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Space+Mono&family=Scheherazade+New:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #000;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+  }
+  #c {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+  }
+  #c canvas { display: block; }
+
+  #eq-panel {
+    position: fixed;
+    top: 50%;
+    left: 28px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* thin left rule */
+  #eq-panel::before {
+    content: '';
+    position: absolute;
+    left: -14px; top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.25);
+  }
+
+  .eq-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0;
+    line-height: 1;
+  }
+
+  /* The variable being defined — italic serif */
+  .var {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 1.4rem;
+    color: rgba(255,255,255,0.95);
+    min-width: 14px;
+  }
+
+  /* equals sign */
+  .eq {
+    font-family: 'IM Fell English', serif;
+    font-size: 1.35rem;
+    color: rgba(255,255,255,0.45);
+    padding: 0 8px;
+  }
+
+  /* math structure — operators, function names */
+  .op {
+    font-family: 'IM Fell English', serif;
+    font-size: 1.25rem;
+    color: rgba(255,255,255,0.55);
+  }
+
+  /* live numeric values — bright, monospace so they don't reflow */
+  .num {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.95rem;
+    color: rgba(255,255,255,0.97);
+    font-style: normal;
+    min-width: 32px;
+    display: inline-block;
+  }
+
+  /* fraction container */
+  .frac {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: middle;
+    margin: 0 3px;
+    gap: 0;
+  }
+  .frac-top {
+    font-family: 'IM Fell English', serif;
+    font-size: 0.88rem;
+    color: rgba(255,255,255,0.55);
+    border-bottom: 1px solid rgba(255,255,255,0.4);
+    padding: 0 3px 1px;
+    line-height: 1.1;
+  }
+  .frac-top .num { font-size: 0.78rem; }
+  .frac-bot {
+    font-family: 'IM Fell English', serif;
+    font-size: 0.88rem;
+    color: rgba(255,255,255,0.55);
+    padding: 1px 3px 0;
+    line-height: 1.1;
+  }
+  .frac-bot .num { font-size: 0.78rem; }
+
+  /* superscript */
+  sup.num {
+    font-size: 0.72rem;
+    vertical-align: super;
+    min-width: auto;
+  }
+
+  .paren { color: rgba(255,255,255,0.3); font-family: 'IM Fell English', serif; font-size: 1.35rem; }
+
+  #farsi-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    line-height: 0.85;
+  }
+  .fw {
+    font-family: 'Scheherazade New', serif;
+    font-weight: 700;
+    direction: rtl;
+    color: rgba(255,255,255,0.09);
+    user-select: none;
+    white-space: nowrap;
+  }
+  .fw1 { font-size: 21vw; }
+  .fw2 { font-size: 14vw; }
+</style>
+</head>
+<body>
+<div id="farsi-bg"><div class="fw fw1">دگردیسی</div></div>
+<div id="c"></div>
+
+<div id="eq-panel">
+
+  <!-- k = A · cos(x/kx) · cos(y/ky) -->
+  <div class="eq-row" id="eq1">
+    <span class="var">k</span>
+    <span class="eq">=</span>
+    <span class="num" id="v-ka">2.0</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">x</span></span><span class="frac-bot"><span class="num" id="v-kx">22</span></span></span>
+    <span class="paren">)</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="num" id="v-ky">70</span></span></span>
+    <span class="paren">)</span>
+  </div>
+
+  <!-- e = y/8 − eo -->
+  <div class="eq-row" id="eq2">
+    <span class="var">e</span>
+    <span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="op">8</span></span></span>
+    <span class="op"> − </span><span class="num" id="v-eo">3</span>
+  </div>
+
+  <!-- d = ||(k,e)||^exp / dd + 4 -->
+  <div class="eq-row" id="eq3">
+    <span class="var">d</span>
+    <span class="eq">=</span>
+    <span class="frac">
+      <span class="frac-top"><span class="op">‖</span><span class="op">(k, e)</span><span class="op">‖</span><sup class="num" id="v-exp">2</sup></span>
+      <span class="frac-bot"><span class="num" id="v-dd">26</span></span>
+    </span>
+    <span class="op"> + 4</span>
+  </div>
+
+  <!-- q = qb − qt · sin(atan2(k,e) · e) -->
+  <div class="eq-row" id="eq4">
+    <span class="var">q</span>
+    <span class="eq">=</span>
+    <span class="num" id="v-qb">95</span>
+    <span class="op"> − </span><span class="num" id="v-qt">1</span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">θ · e</span><span class="paren">)</span>
+  </div>
+
+  <!-- w = k · (3 + ws/d · sin(d² − t·tr)) -->
+  <div class="eq-row" id="eq5">
+    <span class="var">w</span>
+    <span class="eq">=</span>
+    <span class="op">k · </span><span class="paren">(</span><span class="op">3 + </span>
+    <span class="frac"><span class="frac-top"><span class="num" id="v-ws">1.5</span></span><span class="frac-bot"><span class="op">d</span></span></span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">d² − t·</span><span class="num" id="v-tr">0.5</span><span class="paren">)</span><span class="paren">)</span>
+  </div>
+
+  <!-- x,y = (q+w)sin(c), (q + d·ds)cos(c) -->
+  <div class="eq-row" id="eq6">
+    <span class="paren">(</span><span class="var" style="font-style:normal;font-size:0.85rem;">x, y</span><span class="paren">)</span>
+    <span class="eq">=</span>
+    <span class="paren">(</span><span class="op">q+w</span><span class="paren">)</span><span class="op">sin c</span>
+    <span class="op">,  </span>
+    <span class="paren">(</span><span class="op">q + d·</span><span class="num" id="v-ds">3.5</span><span class="paren">)</span><span class="op">cos c</span>
+  </div>
+
+  <!-- c = d/2 + e/99 − t/ts -->
+  <div class="eq-row" id="eq7">
+    <span class="var">c</span>
+    <span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">d</span></span><span class="frac-bot"><span class="op">2</span></span></span>
+    <span class="op"> + </span>
+    <span class="frac"><span class="frac-top"><span class="op">e</span></span><span class="frac-bot"><span class="op">99</span></span></span>
+    <span class="op"> − </span>
+    <span class="frac"><span class="frac-top"><span class="op">t</span></span><span class="frac-bot"><span class="num" id="v-ts">55</span></span></span>
+  </div>
+
+</div>
+
+<script>
+const animals = [
+  { kx:22, ky:70, ka:2,  eo:3,  dd:26, qb:95,  ds:3.5, ws:1.5, tr:0.5, ts:55,  qt:1,  exp:2,   spd:0.06 },
+  { kx:4,  ky:4,  ka:14, eo:0,  dd:20, qb:85,  ds:6,   ws:0.5, tr:4,   ts:100, qt:0,  exp:2.5, spd:0.04 },
+  { kx:3,  ky:7,  ka:11, eo:18, dd:88, qb:65,  ds:18,  ws:9,   tr:2,   ts:11,  qt:3,  exp:2,   spd:0.12 },
+  { kx:36, ky:18, ka:3,  eo:2,  dd:16, qb:105, ds:4,   ws:0.6, tr:0.3, ts:80,  qt:14, exp:1.5, spd:0.03 },
+  { kx:5,  ky:5,  ka:11, eo:12, dd:52, qb:58,  ds:5.5, ws:0.3, tr:4,   ts:160, qt:15, exp:3,   spd:0.05 },
+  { kx:28, ky:50, ka:4,  eo:6,  dd:20, qb:110, ds:1.8, ws:2,   tr:0.4, ts:50,  qt:2,  exp:2,   spd:0.05 },
+  { kx:6,  ky:9,  ka:8,  eo:14, dd:40, qb:68,  ds:9,   ws:7,   tr:2.5, ts:14,  qt:7,  exp:2,   spd:0.10 },
+  { kx:5,  ky:7,  ka:10, eo:8,  dd:70, qb:55,  ds:14,  ws:0.1, tr:5,   ts:300, qt:14, exp:3.5, spd:0.02 },
+  { kx:9,  ky:15, ka:7,  eo:11, dd:58, qb:52,  ds:8,   ws:6,   tr:4,   ts:11,  qt:5,  exp:2,   spd:0.11 },
+  { kx:18, ky:30, ka:5,  eo:0,  dd:13, qb:120, ds:10,  ws:3,   tr:0.5, ts:40,  qt:9,  exp:1.8, spd:0.04 },
+];
+
+const HOLD_SEC  = 6.0;
+const MORPH_SEC = 4.0;
+
+function ease(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+function lerp(a, b, t) { return a + (b-a)*t; }
+function lerpDNA(A, B, t) {
+  const r = {};
+  for (const k of Object.keys(A)) r[k] = lerp(A[k], B[k], t);
+  return r;
+}
+function f(n, dec=1) { return parseFloat(n.toFixed(dec)); }
+
+function set(id, val, dec=1) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = f(val, dec);
+}
+
+function updateEq(dna) {
+  set('v-ka', dna.ka);
+  set('v-kx', dna.kx);
+  set('v-ky', dna.ky);
+  set('v-eo', dna.eo);
+  set('v-dd', dna.dd);
+  set('v-exp', dna.exp);
+  set('v-qb', dna.qb);
+  set('v-qt', dna.qt);
+  set('v-ws', dna.ws);
+  set('v-tr', dna.tr);
+  set('v-ds', dna.ds);
+  set('v-ts', dna.ts);
+}
+
+new p5(function(p) {
+  let tAnim  = 0;
+  let curSpd = 0.06;
+  let clock  = 0;
+  let phase  = 'hold';
+  let idx    = 0;
+
+  p.setup = function() {
+    p.createCanvas(window.innerWidth, window.innerHeight).parent('c');
+    p.strokeWeight(1);
+    updateEq(animals[0]);
+  };
+
+  p.windowResized = function() {
+    p.resizeCanvas(window.innerWidth, window.innerHeight);
+  };
+
+  p.draw = function() {
+    p.background(0);
+    const dt = p.deltaTime / 1000;
+    clock += dt;
+
+    const next = (idx + 1) % animals.length;
+    let dna;
+
+    if (phase === 'hold') {
+      dna = animals[idx];
+      if (clock >= HOLD_SEC) { clock = 0; phase = 'morph'; }
+    } else {
+      const raw = Math.min(clock / MORPH_SEC, 1);
+      dna = lerpDNA(animals[idx], animals[next], ease(raw));
+      if (raw >= 1) { idx = next; clock = 0; phase = 'hold'; }
+    }
+
+    curSpd = lerp(curSpd, dna.spd, 0.018);
+    tAnim += curSpd;
+
+    const spread = dna.qb * Math.sqrt(dna.ds);
+    // Reference spread ~177 (jellyfish). Scale pts quadratically with area.
+    const refSpread = 177;
+    const areaSacle = (spread / refSpread) * (spread / refSpread);
+    const pts = Math.round(Math.min(160000, Math.max(24000, 50000 * areaSacle)));
+
+    // Also boost opacity for larger organisms so density feels even
+    const alpha = Math.round(Math.min(130, Math.max(70, 90 * (refSpread / spread))));
+    p.stroke(255, alpha);
+    const cx = p.width / 2;
+    const cy = p.height / 2;
+    const EXP = dna.exp;
+
+    for (let i = 0; i < pts; i++) {
+      const x = i % 80;
+      const y = i / 80;
+      const k  = dna.ka * p.cos(x / dna.kx) * p.cos(y / dna.ky);
+      const e  = y / 8 - dna.eo;
+      const m  = p.mag(k, e);
+      const d  = Math.pow(m, EXP) / dna.dd + 4;
+      const at = p.atan2(k, e);
+      const q  = dna.qb - dna.qt * p.sin(at * e);
+      const wv = k * (3 + dna.ws / d * p.sin(d * d - tAnim * dna.tr));
+      const c  = d / 2 + e / 99 - tAnim / dna.ts;
+      p.point((q + wv) * p.sin(c) * 1.35 + cx,
+              (q + d  * dna.ds) * p.cos(c) + cy);
+    }
+
+    if (p.frameCount % 4 === 0) updateEq(dna);
+  };
+});
+</script>
+</body>
+</html>

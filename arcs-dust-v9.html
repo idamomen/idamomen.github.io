@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Isfahan · Arcs from Dust</title>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Amiri:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#050302; width:100vw; height:100vh; overflow:hidden; }
+  canvas { position:fixed; inset:0; display:block; }
+
+  #label {
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    pointer-events:none; text-align:center;
+  }
+  #label-fa {
+    font-family:'IM Fell English',serif; font-style:normal;
+    font-size:1.30rem; letter-spacing:0.03em; direction:rtl;
+    color:rgba(255,255,255,0.42); display:block; white-space:nowrap;
+  }
+  #label-en {
+    font-family:'IM Fell English',serif; font-style:italic;
+    font-size:0.95rem; letter-spacing:0.22em; text-transform:uppercase;
+    color:rgba(255,255,255,0.28); display:block; white-space:nowrap; margin-top:3px;
+  }
+
+  .eq-corner {
+    position:fixed; pointer-events:none; z-index:10;
+  }
+  #eq-0 { top:36px;    left:36px; }
+  #eq-1 { top:36px;    right:36px; text-align:right; }
+  #eq-2 { bottom:36px; left:36px; }
+  #eq-3 { bottom:36px; right:36px; text-align:right; }
+
+  .eq-line {
+    font-family:'IM Fell English',serif; font-style:italic;
+    font-size:0.88rem; line-height:2.0; white-space:nowrap; display:block;
+  }
+  .eq-corner.inactive .eq-line { color:rgba(255,255,255,0.13); }
+  .eq-corner.active   .eq-line { color:rgba(255,255,255,0.82); }
+
+  .eq-line .sup { font-size:0.54rem; vertical-align:super; font-style:normal; }
+  .eq-line .sub { font-size:0.54rem; vertical-align:sub;   font-style:normal; }
+  .eq-line .rm  { font-style:normal; font-size:0.74rem; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="label"><span id="label-fa">سی‌وسه‌پل</span><span id="label-en">Si-o-se-pol · Bridge of 33 Arches</span></div>
+
+<!-- top-left: catenary -->
+<div class="eq-corner active" id="eq-0">
+  <span class="eq-line">y = a &middot; <span class="rm">cosh</span>(x/a)</span>
+  <span class="eq-line">a = 0.9 &middot; s</span>
+  <span class="eq-line">H = a(<span class="rm">cosh</span>(s/a) &minus; 1)</span>
+</div>
+
+<!-- top-right: pointed arch -->
+<div class="eq-corner inactive" id="eq-1">
+  <span class="eq-line">R = s + c</span>
+  <span class="eq-line">H = &radic;(R<span class="sup">2</span> &minus; c<span class="sup">2</span>)</span>
+  <span class="eq-line">&theta;<span class="sub">c</span> = <span class="rm">atan2</span>(H, c)</span>
+  <span class="eq-line">c / s = 0.58</span>
+</div>
+
+<!-- bottom-left: arcade -->
+<div class="eq-corner inactive" id="eq-2">
+  <span class="eq-line">x<span class="sub">i</span> = x<span class="sub">0</span> + i &middot; 2s</span>
+  <span class="eq-line">n = 5,&nbsp;&nbsp; c / s = 0.52</span>
+</div>
+
+<!-- bottom-right: vault -->
+<div class="eq-corner inactive" id="eq-3">
+  <span class="eq-line">s<span class="sub">k</span> = s(1 &minus; 0.8k/n)</span>
+  <span class="eq-line">c<span class="sub">k</span>/s<span class="sub">k</span> = 0.56 + 0.026k</span>
+  <span class="eq-line">y<span class="sub">k</span> = y<span class="sub">0</span> &minus; k &middot; &delta;</span>
+</div>
+
+<script>
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+ctx.shadowBlur = 0;
+
+let W = cv.width  = window.innerWidth;
+let H = cv.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  W = cv.width  = window.innerWidth;
+  H = cv.height = window.innerHeight;
+  buildTargets();
+});
+
+// ── simple fast value noise ──────────────────────────────────
+// 256 random gradient table
+const PERM = new Uint8Array(512);
+const GRAD = new Float32Array(512);
+(function(){
+  const p = new Uint8Array(256);
+  for(let i=0;i<256;i++) p[i]=i;
+  for(let i=255;i>0;i--){ const j=Math.random()*(i+1)|0; [p[i],p[j]]=[p[j],p[i]]; }
+  for(let i=0;i<512;i++){ PERM[i]=p[i&255]; GRAD[i]=Math.cos(PERM[i]*0.02454); }
+})();
+
+function smoothstep(t){ return t*t*(3-2*t); }
+function lerp2(a,b,t){ return a+(b-a)*t; }
+
+function noise2(x,y){
+  const xi=Math.floor(x)&255, yi=Math.floor(y)&255;
+  const xf=x-Math.floor(x), yf=y-Math.floor(y);
+  const u=smoothstep(xf), v=smoothstep(yf);
+  const a=PERM[xi]+yi, b=PERM[xi+1]+yi;
+  return lerp2(
+    lerp2(GRAD[a],   GRAD[b],   u),
+    lerp2(GRAD[a+1], GRAD[b+1], u),
+    v
+  );
+}
+
+// ── particle counts ──────────────────────────────────────────
+const N_SWARM = 8000;   // follow arc exactly
+const N_HALO  = 22000;  // dense noisy cloud around arc
+const N_SNOW  = 30000;  // everywhere always
+const N_ALL   = N_SWARM + N_HALO + N_SNOW;
+
+// flat typed arrays — much faster than objects
+const px  = new Float32Array(N_ALL);
+const py  = new Float32Array(N_ALL);
+const pvx = new Float32Array(N_ALL);
+const pvy = new Float32Array(N_ALL);
+const pno = new Float32Array(N_ALL); // noise offset
+const pns = new Float32Array(N_ALL); // noise scale
+const psz = new Float32Array(N_ALL); // dot size
+const pal = new Uint8Array(N_ALL);   // fixed alpha
+const ptx = new Float32Array(N_ALL); // target x
+const pty = new Float32Array(N_ALL); // target y
+const por = new Float32Array(N_ALL); // orbit radius (halo)
+
+// ── STAGES ───────────────────────────────────────────────────
+const STAGES = [
+  { type:'catenary', name:'سی‌وسه‌پل',         nameEn:'Si-o-se-pol · Bridge of 33 Arches', cRatio:0,    n:33, layers:1 },
+  { type:'pointed',  name:'مسجد شیخ لطف‌الله', nameEn:'Sheikh Lotfollah Mosque',            cRatio:0.58, n:1,  layers:1 },
+  { type:'arcade',   name:'مسجد امام',          nameEn:'Imam Mosque',                        cRatio:0.52, n:5,  layers:1 },
+  { type:'vault',    name:'مسجد جامع',          nameEn:'Masjed-e Jame',                      cRatio:0.56, n:1,  layers:7 },
+];
+
+const T_GATHER=5.0, T_HOLD=8.0, T_SCATTER=3.8;
+let arcTargets = [];
+let stageIdx=0, phase='gather', timer=0, blend=0;
+let tFlow=0, frame=0;
+
+function ease(t){ return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
+
+// ── GEOMETRY ─────────────────────────────────────────────────
+function pointedPt(u, s, cr){
+  const c=s*cr, R=s+c, H2=R*R-c*c, H=Math.sqrt(H2<0?0:H2);
+  const tc=Math.atan2(H,c);
+  const u2=(u<=0.5)?u*2:(1-u)*2, th=u2*tc, sg=(u<=0.5)?1:-1;
+  return { x: sg*(-c+R*Math.cos(th)), y: R*Math.sin(th) };
+}
+function catenaryPt(u, s){
+  const a=s*0.90, x=(u*2-1)*s;
+  return { x, y: a*(Math.cosh(s/a)-Math.cosh(x/a)) };
+}
+
+function buildTargets(){
+  const st=STAGES[stageIdx];
+  const cx=W/2, cy=H*0.60;
+  const span=Math.min(W,H)*0.28;
+  arcTargets=[];
+
+  function addArch(ax,ay,s,cr,nPts,type){
+    for(let i=0;i<nPts;i++){
+      const u=i/Math.max(1,nPts-1);
+      const pt=(type==='catenary')?catenaryPt(u,s):pointedPt(u,s,cr);
+      arcTargets.push(ax+pt.x, ay-pt.y);
+    }
+  }
+
+  const nSwarm=N_SWARM;
+  const ROWS = 2, ROW_OFFSET = 0.13; // 2 stacks, 13% of span apart
+
+  if(st.type==='catenary'){
+    const na=4, aS=span*0.52, step=aS*2.05, offX=step*(na-1)/2;
+    const each=Math.floor(nSwarm/(na*ROWS));
+    for(let row=0;row<ROWS;row++){
+      const rowY=cy - row*aS*ROW_OFFSET;
+      for(let i=0;i<na;i++) addArch(cx-offX+i*step, rowY, aS, 0, each, 'catenary');
+    }
+  } else if(st.type==='pointed'){
+    const each=Math.floor(nSwarm/ROWS);
+    for(let row=0;row<ROWS;row++) addArch(cx, cy-row*span*ROW_OFFSET, span, st.cRatio, each, 'pointed');
+  } else if(st.type==='arcade'){
+    const na=st.n, aS=span*0.46, step=aS*2.30, offX=step*(na-1)/2;
+    const each=Math.floor(nSwarm/(na*ROWS));
+    for(let row=0;row<ROWS;row++){
+      const rowY=cy - row*aS*ROW_OFFSET;
+      for(let i=0;i<na;i++) addArch(cx-offX+i*step, rowY, aS, st.cRatio, each, 'pointed');
+    }
+  } else if(st.type==='vault'){
+    const nl=st.layers, each=Math.floor(nSwarm/(nl*ROWS));
+    for(let row=0;row<ROWS;row++){
+      for(let i=0;i<nl;i++){
+        const fr=1-(i/(nl-1))*0.80, yo=i*span*0.044 + row*span*ROW_OFFSET;
+        addArch(cx, cy-yo, span*fr, st.cRatio+i*0.026, each, 'pointed');
+      }
+    }
+  }
+
+  while(arcTargets.length/2 < nSwarm)
+    arcTargets.push(cx+(Math.random()-.5)*30, cy+(Math.random()-.5)*30);
+  arcTargets.length = nSwarm*2;
+
+  // assign swarm targets
+  for(let i=0;i<N_SWARM;i++){
+    ptx[i] = arcTargets[i*2];
+    pty[i] = arcTargets[i*2+1];
+  }
+
+  // assign halo targets = arc point + random scatter within orbit radius
+  for(let i=0;i<N_HALO;i++){
+    const ii=i+N_SWARM;
+    const pick = (Math.random()*N_SWARM|0);
+    const ax=arcTargets[pick*2], ay=arcTargets[pick*2+1];
+    const angle=Math.random()*Math.PI*2;
+    const r=por[ii];
+    ptx[ii] = ax + Math.cos(angle)*r;
+    pty[ii] = ay + Math.sin(angle)*r;
+  }
+
+  // update label + eq
+  // corners: update active class only
+  document.getElementById('label-fa').textContent = st.name;
+  document.getElementById('label-en').textContent = st.nameEn;
+  for(let i=0;i<4;i++){
+    document.getElementById('eq-'+i).className='eq-corner '+(i===stageIdx?'active':'inactive');
+  }
+}
+
+// ── INIT PARTICLES ───────────────────────────────────────────
+function initParticles(){
+  // SWARM  [0 .. N_SWARM)
+  for(let i=0;i<N_SWARM;i++){
+    const r=Math.random()*Math.min(W,H)*0.5;
+    const a=Math.random()*Math.PI*2;
+    px[i]=W/2+Math.cos(a)*r; py[i]=H/2+Math.sin(a)*r;
+    pvx[i]=0; pvy[i]=0;
+    pno[i]=Math.random()*200000;
+    pns[i]=0.0014+Math.random()*0.0012;
+    psz[i]=1.0+Math.random()*1.4;
+    pal[i]=140+Math.random()*100|0;
+  }
+
+  // HALO  [N_SWARM .. N_SWARM+N_HALO)
+  for(let i=0;i<N_HALO;i++){
+    const ii=i+N_SWARM;
+    const r=Math.random()*Math.min(W,H)*0.55;
+    const a=Math.random()*Math.PI*2;
+    px[ii]=W/2+Math.cos(a)*r; py[ii]=H/2+Math.sin(a)*r;
+    pvx[ii]=0; pvy[ii]=0;
+    pno[ii]=Math.random()*200000;
+    pns[ii]=0.0016+Math.random()*0.0014;
+    psz[ii]=0.8+Math.random()*1.4;
+    pal[ii]=70+Math.random()*90|0;
+    por[ii]=12+Math.random()*110; // orbit radius
+  }
+
+  // SNOW  [N_SWARM+N_HALO .. N_ALL)
+  for(let i=0;i<N_SNOW;i++){
+    const ii=i+N_SWARM+N_HALO;
+    px[ii]=Math.random()*W; py[ii]=Math.random()*H;
+    pvx[ii]=0; pvy[ii]=0;
+    pno[ii]=Math.random()*200000;
+    pns[ii]=0.0010+Math.random()*0.0010;
+    psz[ii]=0.5+Math.random()*1.0;
+    pal[ii]=25+Math.random()*55|0;
+  }
+}
+
+// ── UPDATE ───────────────────────────────────────────────────
+function update(){
+  const cx=W/2, cy=H*0.60;
+
+  // SWARM
+  for(let i=0;i<N_SWARM;i++){
+    const ang = noise2(px[i]*pns[i]+pno[i]*0.00022, py[i]*pns[i]+tFlow)
+                * Math.PI*5.6 + tFlow*0.12;
+    const ddx=cx-px[i], ddy=cy-py[i], dc=Math.sqrt(ddx*ddx+ddy*ddy)+0.1;
+    const swX=-ddy/dc*0.00016*dc*0.55, swY=ddx/dc*0.00016*dc*0.55;
+
+    const noiseDamp = 1-blend*0.70;
+    const af = blend*0.13;
+    pvx[i]=pvx[i]*0.82 + Math.cos(ang)*0.11*noiseDamp + swX + (ptx[i]-px[i])*af;
+    pvy[i]=pvy[i]*0.82 + Math.sin(ang)*0.11*noiseDamp + swY + (pty[i]-py[i])*af;
+    const sp=Math.sqrt(pvx[i]*pvx[i]+pvy[i]*pvy[i]);
+    if(sp>3.5){pvx[i]*=3.5/sp;pvy[i]*=3.5/sp;}
+    px[i]+=pvx[i]; py[i]+=pvy[i];
+    if(px[i]<-50)px[i]+=W+100; if(px[i]>W+50)px[i]-=W+100;
+    if(py[i]<-50)py[i]+=H+100; if(py[i]>H+100)py[i]-=H+100;
+  }
+
+  // HALO
+  for(let i=0;i<N_HALO;i++){
+    const ii=i+N_SWARM;
+    const ang = noise2(px[ii]*pns[ii]+pno[ii]*0.00020, py[ii]*pns[ii]+tFlow*0.95)
+                * Math.PI*5.8 + tFlow*0.10;
+    const ddx=cx-px[ii], ddy=cy-py[ii], dc=Math.sqrt(ddx*ddx+ddy*ddy)+0.1;
+    const swX=-ddy/dc*0.00020*dc*0.60, swY=ddx/dc*0.00020*dc*0.60;
+
+    // pull toward halo target
+    const htx=ptx[ii], hty=pty[ii];
+    const af=blend*0.028;
+    pvx[ii]=pvx[ii]*0.87 + Math.cos(ang)*0.115 + swX + (htx-px[ii])*af;
+    pvy[ii]=pvy[ii]*0.87 + Math.sin(ang)*0.115 + swY + (hty-py[ii])*af;
+    const sp=Math.sqrt(pvx[ii]*pvx[ii]+pvy[ii]*pvy[ii]);
+    if(sp>3.2){pvx[ii]*=3.2/sp;pvy[ii]*=3.2/sp;}
+    px[ii]+=pvx[ii]; py[ii]+=pvy[ii];
+    if(px[ii]<-50)px[ii]+=W+100; if(px[ii]>W+50)px[ii]-=W+100;
+    if(py[ii]<-50)py[ii]+=H+100; if(py[ii]>H+100)py[ii]-=H+100;
+  }
+
+  // SNOW — update every frame but simpler
+  for(let i=0;i<N_SNOW;i++){
+    const ii=i+N_SWARM+N_HALO;
+    const ang = noise2(px[ii]*pns[ii]+pno[ii]*0.00018, py[ii]*pns[ii]+tFlow*0.88)
+                * Math.PI*5.6 + tFlow*0.08;
+    const ddx=cx-px[ii], ddy=cy-py[ii];
+    pvx[ii]=pvx[ii]*0.92 + Math.cos(ang)*0.12 + ddx*0.00006;
+    pvy[ii]=pvy[ii]*0.92 + Math.sin(ang)*0.12 + ddy*0.00006;
+    const sp=Math.sqrt(pvx[ii]*pvx[ii]+pvy[ii]*pvy[ii]);
+    if(sp>3.0){pvx[ii]*=3.0/sp;pvy[ii]*=3.0/sp;}
+    px[ii]+=pvx[ii]; py[ii]+=pvy[ii];
+    if(px[ii]<-50)px[ii]+=W+100; if(px[ii]>W+50)px[ii]-=W+100;
+    if(py[ii]<-50)py[ii]+=H+100; if(py[ii]>H+100)py[ii]-=H+100;
+  }
+}
+
+// ── DRAW ─────────────────────────────────────────────────────
+function draw(){
+  ctx.fillStyle='rgb(5,3,2)';
+  ctx.fillRect(0,0,W,H);
+
+  // draw snow first (background layer)
+  for(let i=0;i<N_SNOW;i++){
+    const ii=i+N_SWARM+N_HALO;
+    const a=pal[ii], sz=psz[ii];
+    ctx.fillStyle=`rgba(255,255,255,${a/255})`;
+    ctx.fillRect(px[ii]-sz*0.5, py[ii]-sz*0.5, sz, sz);
+  }
+
+  // draw halo (mid layer)
+  for(let i=0;i<N_HALO;i++){
+    const ii=i+N_SWARM;
+    const a=pal[ii], sz=psz[ii];
+    ctx.fillStyle=`rgba(255,255,255,${a/255})`;
+    ctx.fillRect(px[ii]-sz*0.5, py[ii]-sz*0.5, sz, sz);
+  }
+
+  // draw swarm on top (brightest)
+  for(let i=0;i<N_SWARM;i++){
+    const a=pal[i], sz=psz[i];
+    ctx.fillStyle=`rgba(255,255,255,${a/255})`;
+    ctx.fillRect(px[i]-sz*0.5, py[i]-sz*0.5, sz, sz);
+  }
+}
+
+// ── LOOP ─────────────────────────────────────────────────────
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000, 0.05);
+  last=now;
+  timer+=dt;
+  tFlow+=0.0025;
+  frame++;
+
+  switch(phase){
+    case 'gather':
+      blend=ease(Math.min(timer/T_GATHER,1));
+      if(timer>=T_GATHER){timer=0;phase='hold';blend=1;}
+      break;
+    case 'hold':
+      blend=1;
+      if(timer>=T_HOLD){timer=0;phase='scatter';}
+      break;
+    case 'scatter':
+      blend=1-ease(Math.min(timer/T_SCATTER,1));
+      if(timer>=T_SCATTER){
+        stageIdx=(stageIdx+1)%STAGES.length;
+        buildTargets();
+        timer=0;phase='gather';blend=0;
+      }
+      break;
+  }
+
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ── START ─────────────────────────────────────────────────────
+initParticles();
+buildTargets();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

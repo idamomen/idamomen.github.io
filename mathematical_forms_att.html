@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mathematical Forms</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Space+Mono&family=Scheherazade+New:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { background:#000; width:100vw; height:100vh; overflow:hidden; }
+
+  #farsi-bg {
+    position:fixed; inset:0; z-index:5;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .fw {
+    font-family:'Scheherazade New',serif; font-weight:700;
+    direction:rtl; color:rgba(255,255,255,0.07);
+    user-select:none; white-space:nowrap; font-size:21vw;
+  }
+
+  /* Left panel — same as evolution piece */
+  #eq-left {
+    position:fixed; top:50%; left:32px;
+    transform:translateY(-50%);
+    pointer-events:none; z-index:10;
+    display:flex; flex-direction:column; gap:20px;
+  }
+  #eq-left::before {
+    content:''; position:absolute;
+    left:-16px; top:0; bottom:0;
+    width:1px; background:rgba(255,255,255,0.22);
+  }
+
+  /* Right panel */
+  #eq-right {
+    position:fixed; top:50%; right:32px;
+    transform:translateY(-50%);
+    pointer-events:none; z-index:10;
+    display:flex; flex-direction:column; gap:20px;
+    text-align:right;
+  }
+  #eq-right::after {
+    content:''; position:absolute;
+    right:-16px; top:0; bottom:0;
+    width:1px; background:rgba(255,255,255,0.22);
+  }
+
+  .eq-line {
+    font-family:'IM Fell English', serif;
+    font-size:1.45rem;
+    line-height:1.3;
+    color:rgba(255,255,255,0.48);
+    white-space:nowrap;
+  }
+  .eq-line .val {
+    color:rgba(255,255,255,0.95);
+    font-family:'Space Mono', monospace;
+    font-size:1.05rem;
+    font-style:normal;
+  }
+  .eq-line .sym { color:rgba(255,255,255,0.32); }
+  .eq-line .var { font-style:italic; color:rgba(255,255,255,0.72); }
+
+  .eq-sub {
+    font-family:'IM Fell English', serif;
+    font-size:0.95rem;
+    font-style:italic;
+    color:rgba(255,255,255,0.32);
+    margin-top:4px;
+    white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="farsi-bg"><div class="fw">دگردیسی</div></div>
+<div id="eq-left"></div>
+<div id="eq-right"></div>
+
+<script>
+// ── Timing ───────────────────────────────────────────────────────
+const ACT_ATT   = 55;   // attractor phase
+const FADE_12   = 8;    // crossfade att→ls
+const ACT_LS    = 55;   // l-system phase
+const FADE_23   = 8;    // crossfade ls→combined
+const ACT_COMBO = 40;   // combined finale
+const TOTAL = ACT_ATT + FADE_12 + ACT_LS + FADE_23 + ACT_COMBO;
+const PRESET_HOLD = 10;
+
+// ── Attractor presets ────────────────────────────────────────────
+const ATT = [
+  { type:'clifford', a:-1.4,  b:1.6,   c:1.0,   d:0.7   },
+  { type:'clifford', a:-1.7,  b:1.3,   c:-0.1,  d:-1.21 },
+  { type:'clifford', a:1.5,   b:-1.8,  c:1.6,   d:0.9   },
+  { type:'dejong',   a:1.4,   b:-2.3,  c:2.4,   d:-2.1  },
+  { type:'dejong',   a:-2.7,  b:-0.9,  c:-0.9,  d:-2.7  },
+];
+
+// ── L-System presets — ends with tree ────────────────────────────
+// Math notation: ω = axiom, δ = angle, R⁺/R⁻ = rotate, [ ] = branch stack
+const LS = [
+  {
+    name:'Fern',
+    axiom:'X',
+    rules:{ X:'F+[[X]-X]-F[-FX]+X', F:'FF' },
+    angle:25, iter:5, len:7, sx:0.5, sy:0.90, startAngle:-90,
+    // Display as math
+    eqLeft: [
+      { text: 'ω', sym:' = ', val:'X' },
+      { text: 'δ', sym:' = ', val:'25°' },
+    ],
+    eqRight: [
+      { text: 'X', sym: ' ↦ ', val: 'F·[+[X]−X]·F·[−FX]+X' },
+      { text: 'F', sym: ' ↦ ', val: 'F·F' },
+    ]
+  },
+  {
+    name:'Coral',
+    axiom:'F',
+    rules:{ F:'F[+F]F[-F][F]' },
+    angle:20, iter:5, len:8, sx:0.5, sy:0.90, startAngle:-90,
+    eqLeft: [
+      { text: 'ω', sym:' = ', val:'F' },
+      { text: 'δ', sym:' = ', val:'20°' },
+    ],
+    eqRight: [
+      { text: 'F', sym: ' ↦ ', val: 'F·[+F]·F·[−F]·[F]' },
+    ]
+  },
+  {
+    name:'Koch Snowflake',
+    axiom:'F++F++F',
+    rules:{ F:'F-F++F-F' },
+    angle:60, iter:4, len:9, sx:0.5, sy:0.65, startAngle:0,
+    eqLeft: [
+      { text: 'ω', sym:' = ', val:'F⁺⁺F⁺⁺F' },
+      { text: 'δ', sym:' = ', val:'60°' },
+    ],
+    eqRight: [
+      { text: 'F', sym: ' ↦ ', val: 'F−F⁺⁺F−F' },
+    ]
+  },
+  {
+    name:'Tree',
+    axiom:'F',
+    rules:{ F:'FF-[-F+F+F]+[+F-F-F]' },
+    angle:22.5, iter:4, len:13, sx:0.5, sy:0.94, startAngle:-90,
+    eqLeft: [
+      { text: 'ω', sym:' = ', val:'F' },
+      { text: 'δ', sym:' = ', val:'22.5°' },
+    ],
+    eqRight: [
+      { text: 'F', sym: ' ↦ ', val: 'F·F−[−F+F+F]+[+F−F−F]' },
+    ]
+  },
+];
+
+function lerp(a,b,t) { return a+(b-a)*t; }
+function ease(t) { return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
+function clamp(v,a,b) { return Math.max(a,Math.min(b,v)); }
+
+function expandLS(preset) {
+  let s=preset.axiom;
+  for(let i=0;i<preset.iter;i++){
+    let ns=''; for(const c of s) ns+=preset.rules[c]||c;
+    s=ns; if(s.length>900000) break;
+  }
+  return s;
+}
+
+// ── Equation rendering ────────────────────────────────────────────
+function renderLines(id, lines, alpha) {
+  const el = document.getElementById(id);
+  el.innerHTML = lines.map(l => {
+    if (l.divider) return `<div class="eq-sub" style="opacity:${alpha}">${l.divider}</div>`;
+    return `<div class="eq-line" style="opacity:${alpha}">
+      <span class="var">${l.text||''}</span><span class="sym">${l.sym||''}</span><span class="val">${l.val||''}</span>
+    </div>`;
+  }).join('');
+}
+
+function showAttEq(pr, alpha) {
+  let left, right;
+  if(pr.type==='clifford') {
+    left = [
+      { text:'x', sym:'ₙ₊₁ = sin(', val: pr.a.toFixed(2), },
+      { text:'', sym:'·y) + ', val: pr.c.toFixed(2) },
+      { text:'', sym:'·cos(', val: pr.a.toFixed(2) },
+      { text:'', sym:'·x)', val:'' },
+    ];
+    // Simpler — build as two full lines
+    left = [
+      { text:'xₙ₊₁', sym:' = sin(', val: pr.a.toFixed(2)+'·y) + '+pr.c.toFixed(2)+'·cos('+pr.a.toFixed(2)+'·x)' },
+      { text:'yₙ₊₁', sym:' = sin(', val: pr.b.toFixed(2)+'·x) + '+pr.d.toFixed(2)+'·cos('+pr.b.toFixed(2)+'·y)' },
+    ];
+    right = [];
+  } else {
+    left = [
+      { text:'xₙ₊₁', sym:' = sin(', val: pr.a.toFixed(2)+'·y) − cos('+pr.b.toFixed(2)+'·x)' },
+      { text:'yₙ₊₁', sym:' = sin(', val: pr.c.toFixed(2)+'·x) − cos('+pr.d.toFixed(2)+'·y)' },
+    ];
+    right = [];
+  }
+  renderLines('eq-left', left, alpha);
+  renderLines('eq-right', right, alpha);
+}
+
+function showLSEq(preset, alpha) {
+  renderLines('eq-left',  preset.eqLeft,  alpha);
+  renderLines('eq-right', preset.eqRight, alpha);
+}
+
+function clearEq() {
+  document.getElementById('eq-left').innerHTML='';
+  document.getElementById('eq-right').innerHTML='';
+}
+
+// ── p5 sketch ────────────────────────────────────────────────────
+new p5(function(p) {
+  let elapsed=0;
+
+  // Attractor
+  let attIdx=0, attClock=0, ax=0.1, ay=0.1;
+
+  function iterAtt(x,y,pr) {
+    if(pr.type==='clifford') return {
+      x:Math.sin(pr.a*y)+pr.c*Math.cos(pr.a*x),
+      y:Math.sin(pr.b*x)+pr.d*Math.cos(pr.b*y)
+    };
+    return {
+      x:Math.sin(pr.a*y)-Math.cos(pr.b*x),
+      y:Math.sin(pr.c*x)-Math.cos(pr.d*y)
+    };
+  }
+  function lerpAtt(A,B,t){
+    return{type:A.type,a:lerp(A.a,B.a,t),b:lerp(A.b,B.b,t),c:lerp(A.c,B.c,t),d:lerp(A.d,B.d,t)};
+  }
+
+  function updateAtt(dt){
+    attClock+=dt;
+    if(attClock>=PRESET_HOLD){attClock=0;attIdx=(attIdx+1)%ATT.length;ax=0.1;ay=0.1;}
+  }
+
+  function drawAtt(alpha){
+    const scale=Math.min(p.width,p.height)*0.22;
+    const cx=p.width/2, cy=p.height/2;
+    const pct=clamp((attClock-PRESET_HOLD*0.6)/(PRESET_HOLD*0.4),0,1);
+    const cur=ATT[attIdx], nxt=ATT[(attIdx+1)%ATT.length];
+    const pr=pct>0?lerpAtt(cur,nxt,ease(pct)):cur;
+    p.stroke(255,clamp(alpha*150,0,255)); p.strokeWeight(1);
+    for(let i=0;i<120000;i++){
+      const n=iterAtt(ax,ay,pr); ax=n.x; ay=n.y;
+      const px=Math.round(ax*scale+cx), py=Math.round(ay*scale+cy);
+      if(px>=0&&px<p.width&&py>=0&&py<p.height) p.point(px,py);
+    }
+    if(p.frameCount%3===0) showAttEq(pr, alpha);
+  }
+
+  // L-System
+  let lsIdx=0, lsClock=0, lsStr='', lsProgress=0;
+
+  function initLS(idx){ lsStr=expandLS(LS[idx]); lsProgress=0; }
+
+  function updateLS(dt){
+    lsClock+=dt;
+    lsProgress=clamp(lsProgress+dt/6,0,1);
+    if(lsClock>=PRESET_HOLD){
+      lsClock=0; lsIdx=(lsIdx+1)%LS.length; initLS(lsIdx);
+    }
+  }
+
+  function drawLS(alpha){
+    if(!lsStr||lsProgress<=0) return;
+    const preset=LS[lsIdx];
+    const steps=Math.floor(clamp(lsProgress,0,1)*lsStr.length);
+    if(steps<=0) return;
+    const stack=[];
+    let x=p.width*preset.sx, y=p.height*preset.sy, angle=preset.startAngle;
+    p.stroke(255,alpha*235); p.strokeWeight(0.9); p.noFill();
+    for(let i=0;i<steps;i++){
+      const c=lsStr[i];
+      if(c==='F'){
+        const nx=x+preset.len*Math.cos(angle*Math.PI/180);
+        const ny=y+preset.len*Math.sin(angle*Math.PI/180);
+        if(nx>-200&&nx<p.width+200&&ny>-200&&ny<p.height+200) p.line(x,y,nx,ny);
+        x=nx; y=ny;
+      } else if(c==='+'){angle+=preset.angle;}
+        else if(c==='-'){angle-=preset.angle;}
+        else if(c==='['){stack.push({x,y,angle});}
+        else if(c===']'){const s=stack.pop();if(s){x=s.x;y=s.y;angle=s.angle;}}
+    }
+    if(p.frameCount%3===0) showLSEq(preset, alpha);
+  }
+
+  p.setup = function(){
+    p.createCanvas(window.innerWidth,window.innerHeight);
+    p.pixelDensity(1);
+    initLS(0);
+  };
+  p.windowResized = function(){ p.resizeCanvas(window.innerWidth,window.innerHeight); ax=0.1;ay=0.1; };
+
+  p.draw = function(){
+    const dt=p.deltaTime/1000;
+    elapsed+=dt;
+    const e=elapsed%TOTAL;
+
+    // Phase boundaries
+    const T1 = ACT_ATT;
+    const T2 = T1+FADE_12;
+    const T3 = T2+ACT_LS;
+    const T4 = T3+FADE_23;
+    const T5 = T4+ACT_COMBO;
+
+    let attA=0, lsA=0;
+
+    if      (e < T1) { attA=1; }
+    else if (e < T2) { const t=ease((e-T1)/FADE_12); attA=1-t; lsA=t; }
+    else if (e < T3) { lsA=1; }
+    else if (e < T4) { const t=ease((e-T3)/FADE_23); lsA=1-t; attA=t; }
+    else             { attA=1; lsA=1; } // combined finale
+
+    // Background
+    const needsTrail = attA>0.1;
+    if(needsTrail) { p.background(0,20); }
+    else           { p.background(0,255); }
+
+    if(attA>0){ updateAtt(dt); drawAtt(attA); }
+    if(lsA>0) { updateLS(dt);  drawLS(lsA); }
+
+    // In combined phase show both equations — att on left, ls on right only
+    if(attA>0.5&&lsA>0.5){
+      const pct2=clamp((attClock-PRESET_HOLD*0.6)/(PRESET_HOLD*0.4),0,1);
+      const cur=ATT[attIdx], nxt=ATT[(attIdx+1)%ATT.length];
+      const pr=pct2>0?lerpAtt(cur,nxt,ease(pct2)):cur;
+      if(p.frameCount%3===0){
+        showAttEq(pr, attA);
+        // Override right side with LS rules
+        renderLines('eq-right', LS[lsIdx].eqRight, lsA);
+      }
+    }
+
+    if(attA<0.05&&lsA<0.05) clearEq();
+  };
+});
+</script>
+</body>
+</html>

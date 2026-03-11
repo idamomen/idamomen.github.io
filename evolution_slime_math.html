@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دگردیسی</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Space+Mono&family=Scheherazade+New:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { background:#000; width:100vw; height:100vh; overflow:hidden; }
+
+  #breath-canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:1; }
+  #evo-canvas    { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2; pointer-events:none; }
+  #slime-canvas  { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:3; pointer-events:none; }
+  #math-canvas   { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:4; pointer-events:none; }
+
+  #farsi-bg {
+    position:fixed; inset:0; z-index:5;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    pointer-events:none; line-height:0.85;
+  }
+  .fw { font-family:'Scheherazade New',serif; font-weight:700; direction:rtl; color:rgba(255,255,255,0.09); user-select:none; white-space:nowrap; font-size:21vw; }
+
+  /* ── Breath equation panel ── */
+  #breath-eq {
+    position:fixed; top:50%; left:36px; transform:translateY(-50%);
+    pointer-events:none; z-index:10; display:flex; flex-direction:column; gap:18px;
+    transition:opacity 2s ease;
+  }
+  #breath-eq::before { content:''; position:absolute; left:-18px; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.25); }
+
+  /* ── Evolution equation panel ── */
+  #eq-panel {
+    position:fixed; top:50%; left:36px; transform:translateY(-50%);
+    pointer-events:none; z-index:10; display:flex; flex-direction:column; gap:18px;
+    transition:opacity 2s ease; opacity:0;
+  }
+  #eq-panel::before { content:''; position:absolute; left:-18px; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.25); }
+
+  .eq-row { display:flex; align-items:baseline; gap:0; line-height:1; }
+  .var  { font-family:'IM Fell English',serif; font-style:italic; font-size:2.5rem; color:rgba(255,255,255,0.95); min-width:20px; }
+  .eq   { font-family:'IM Fell English',serif; font-size:2.4rem; color:rgba(255,255,255,0.45); padding:0 10px; }
+  .op   { font-family:'IM Fell English',serif; font-size:2.2rem; color:rgba(255,255,255,0.55); }
+  .num  { font-family:'Scheherazade New',serif; font-weight:700; font-size:2rem; color:rgba(255,255,255,0.97); font-style:normal; min-width:32px; display:inline-block; direction:rtl; }
+  .frac { display:inline-flex; flex-direction:column; align-items:center; vertical-align:middle; margin:0 5px; }
+  .frac-top { font-family:'IM Fell English',serif; font-size:1.5rem; color:rgba(255,255,255,0.55); border-bottom:1px solid rgba(255,255,255,0.4); padding:0 4px 2px; line-height:1.1; }
+  .frac-top .num { font-size:1.6rem; }
+  .frac-bot { font-family:'IM Fell English',serif; font-size:1.5rem; color:rgba(255,255,255,0.55); padding:2px 4px 0; line-height:1.1; }
+  .frac-bot .num { font-size:1.6rem; }
+  sup.num { font-size:1.3rem; vertical-align:super; min-width:auto; }
+  .paren { color:rgba(255,255,255,0.3); font-family:'IM Fell English',serif; font-size:2.4rem; }
+
+  /* ── Math forms equation panels ── */
+  #eq-left {
+    position:fixed; top:50%; left:36px; transform:translateY(-50%);
+    pointer-events:none; z-index:10;
+    display:flex; flex-direction:column; gap:28px;
+    opacity:0; transition:opacity 0.5s;
+  }
+  #eq-left::before { content:''; position:absolute; left:-18px; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.22); }
+
+  #eq-right {
+    position:fixed; top:50%; right:36px; transform:translateY(-50%);
+    pointer-events:none; z-index:10;
+    display:flex; flex-direction:column; gap:28px;
+    text-align:right; opacity:0; transition:opacity 0.5s;
+  }
+  #eq-right::after { content:''; position:absolute; right:-18px; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.22); }
+
+  .eq-line {
+    font-family:'IM Fell English', serif; font-size:2.5rem;
+    line-height:1.3; color:rgba(255,255,255,0.48); white-space:nowrap;
+  }
+  .eq-line .mval {
+    color:rgba(255,255,255,0.95);
+    font-family:'Scheherazade New', serif; font-weight:700;
+    font-size:2rem; font-style:normal; direction:rtl;
+  }
+  .eq-line .msym { color:rgba(255,255,255,0.32); }
+  .eq-line .mvar { font-style:italic; color:rgba(255,255,255,0.72); }
+  .eq-sub {
+    font-family:'IM Fell English', serif; font-size:1.5rem;
+    font-style:italic; color:rgba(255,255,255,0.32);
+    margin-top:6px; white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div id="farsi-bg"><div class="fw">دگردیسی</div></div>
+
+<div id="breath-canvas"></div>
+<div id="evo-canvas"></div>
+<div id="slime-canvas"></div>
+<div id="math-canvas"></div>
+
+<!-- Breath equation (static, Farsi numerals) -->
+<div id="breath-eq">
+  <div class="eq-row">
+    <span class="var">k</span><span class="eq">=</span>
+    <span class="num">۵</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">x</span></span><span class="frac-bot"><span class="num">۱۴</span></span></span>
+    <span class="paren">)</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="num">۳۰</span></span></span>
+    <span class="paren">)</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">e</span><span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="num">۸</span></span></span>
+    <span class="op"> − </span><span class="num">۱۳</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">d</span><span class="eq">=</span>
+    <span class="frac">
+      <span class="frac-top"><span class="op">‖(k,e)‖</span><sup class="num">۲</sup></span>
+      <span class="frac-bot"><span class="num">۵۹</span></span>
+    </span>
+    <span class="op"> + ۴</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">q</span><span class="eq">=</span>
+    <span class="num">۶۰</span>
+    <span class="op"> − </span><span class="num">۳</span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">θ · e</span><span class="paren">)</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">w</span><span class="eq">=</span>
+    <span class="op">k · </span><span class="paren">(</span><span class="num">۳</span><span class="op"> + </span>
+    <span class="frac"><span class="frac-top"><span class="num">۴</span></span><span class="frac-bot"><span class="op">d</span></span></span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">d² − t·</span><span class="num">۲</span><span class="paren">))</span>
+  </div>
+  <div class="eq-row">
+    <span class="paren">(</span><span class="var" style="font-style:normal;font-size:1.5rem;">x,y</span><span class="paren">)</span>
+    <span class="eq">=</span>
+    <span class="paren">(</span><span class="op">q+w</span><span class="paren">)</span><span class="op">sin c , </span>
+    <span class="paren">(</span><span class="op">q+d·</span><span class="num">۹</span><span class="paren">)</span><span class="op">cos c</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">c</span><span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">d</span></span><span class="frac-bot"><span class="num">۲</span></span></span>
+    <span class="op"> + </span>
+    <span class="frac"><span class="frac-top"><span class="op">e</span></span><span class="frac-bot"><span class="num">۹۹</span></span></span>
+    <span class="op"> − </span>
+    <span class="frac"><span class="frac-top"><span class="op">t</span></span><span class="frac-bot"><span class="num">۱۸</span></span></span>
+  </div>
+</div>
+
+<!-- Evolution equations (dynamic, Farsi numerals) -->
+<div id="eq-panel">
+  <div class="eq-row">
+    <span class="var">k</span><span class="eq">=</span>
+    <span class="num" id="v-ka">۲</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">x</span></span><span class="frac-bot"><span class="num" id="v-kx">۲۲</span></span></span>
+    <span class="paren">)</span>
+    <span class="op"> · cos</span><span class="paren">(</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="num" id="v-ky">۷۰</span></span></span>
+    <span class="paren">)</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">e</span><span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">y</span></span><span class="frac-bot"><span class="num">۸</span></span></span>
+    <span class="op"> − </span><span class="num" id="v-eo">۳</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">d</span><span class="eq">=</span>
+    <span class="frac">
+      <span class="frac-top"><span class="op">‖(k,e)‖</span><sup class="num" id="v-exp">۲</sup></span>
+      <span class="frac-bot"><span class="num" id="v-dd">۲۶</span></span>
+    </span>
+    <span class="op"> + ۴</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">q</span><span class="eq">=</span>
+    <span class="num" id="v-qb">۹۵</span>
+    <span class="op"> − </span><span class="num" id="v-qt">۱</span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">θ · e</span><span class="paren">)</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">w</span><span class="eq">=</span>
+    <span class="op">k · </span><span class="paren">(</span><span class="num">۳</span><span class="op"> + </span>
+    <span class="frac"><span class="frac-top"><span class="num" id="v-ws">۱.۵</span></span><span class="frac-bot"><span class="op">d</span></span></span>
+    <span class="op"> · sin</span><span class="paren">(</span><span class="op">d² − t·</span><span class="num" id="v-tr">۰.۵</span><span class="paren">))</span>
+  </div>
+  <div class="eq-row">
+    <span class="paren">(</span><span class="var" style="font-style:normal;font-size:1.5rem;">x,y</span><span class="paren">)</span>
+    <span class="eq">=</span>
+    <span class="paren">(</span><span class="op">q+w</span><span class="paren">)</span><span class="op">sin c , </span>
+    <span class="paren">(</span><span class="op">q+d·</span><span class="num" id="v-ds">۳.۵</span><span class="paren">)</span><span class="op">cos c</span>
+  </div>
+  <div class="eq-row">
+    <span class="var">c</span><span class="eq">=</span>
+    <span class="frac"><span class="frac-top"><span class="op">d</span></span><span class="frac-bot"><span class="num">۲</span></span></span>
+    <span class="op"> + </span>
+    <span class="frac"><span class="frac-top"><span class="op">e</span></span><span class="frac-bot"><span class="num">۹۹</span></span></span>
+    <span class="op"> − </span>
+    <span class="frac"><span class="frac-top"><span class="op">t</span></span><span class="frac-bot"><span class="num" id="v-ts">۵۵</span></span></span>
+  </div>
+</div>
+
+<!-- Math forms equations -->
+<div id="eq-left"></div>
+<div id="eq-right"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  FARSI NUMERAL CONVERTER
+// ══════════════════════════════════════════════════════════════════
+const FARSI_DIGITS = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+function toFarsi(n, decimals=1) {
+  const s = parseFloat(n.toFixed(decimals)).toString();
+  return s.replace(/[0-9]/g, d => FARSI_DIGITS[parseInt(d)]).replace('.','٫');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  GLOBAL PHASE CONTROL
+// ══════════════════════════════════════════════════════════════════
+const BREATH_SEC       = 25;    // breath organism opening
+const BREATH_FADE_SEC  = 6;     // breath→evolution crossfade
+const SLIME_AFTER_SEC  = 100;   // evolution plays for 100s, then slime
+const MATH_AFTER_SLIME = 60;    // math forms start 60s after slime appears
+const MATH_FADE_SEC    = 20;    // crossfade slime → math forms (slow dissolve)
+
+const HOLD_SEC  = 12.0;
+const MORPH_SEC = 8.0;
+
+window.breathProgress = 1;      // starts at full
+window.evoStarted     = false;
+window.evoProgress    = 0;
+window.slimeProgress  = 0;
+window.slimeStarted   = false;
+window.mathProgress   = 0;
+window.mathStarted    = false;
+
+// ══════════════════════════════════════════════════════════════════
+//  EVOLUTION ANIMAL DNA
+// ══════════════════════════════════════════════════════════════════
+const animals = [
+  { kx:22, ky:70, ka:2,  eo:3,  dd:26, qb:95,  ds:3.5, ws:1.5, tr:0.5, ts:55,  qt:1,  exp:2,   spd:0.06 },
+  { kx:14, ky:22, ka:5,  eo:6,  dd:24, qb:80,  ds:5,   ws:3,   tr:0.8, ts:60,  qt:6,  exp:1.7, spd:0.05 },
+  { kx:3,  ky:7,  ka:11, eo:18, dd:88, qb:65,  ds:18,  ws:9,   tr:2,   ts:11,  qt:3,  exp:2,   spd:0.12 },
+  { kx:36, ky:18, ka:3,  eo:2,  dd:16, qb:105, ds:4,   ws:0.6, tr:0.3, ts:80,  qt:14, exp:1.5, spd:0.03 },
+  { kx:11, ky:16, ka:6,  eo:9,  dd:34, qb:72,  ds:6,   ws:4,   tr:1.2, ts:28,  qt:9,  exp:1.8, spd:0.07 },
+  { kx:28, ky:50, ka:4,  eo:6,  dd:20, qb:110, ds:1.8, ws:2,   tr:0.4, ts:50,  qt:2,  exp:2,   spd:0.05 },
+  { kx:6,  ky:9,  ka:8,  eo:14, dd:40, qb:68,  ds:9,   ws:7,   tr:2.5, ts:14,  qt:7,  exp:2,   spd:0.10 },
+  { kx:13, ky:19, ka:7,  eo:5,  dd:38, qb:88,  ds:7,   ws:2,   tr:0.9, ts:70,  qt:11, exp:1.9, spd:0.04 },
+  { kx:7,  ky:11, ka:9,  eo:13, dd:55, qb:58,  ds:11,  ws:8,   tr:1.8, ts:16,  qt:6,  exp:2,   spd:0.09 },
+  { kx:18, ky:30, ka:5,  eo:0,  dd:13, qb:120, ds:10,  ws:3,   tr:0.5, ts:40,  qt:9,  exp:1.8, spd:0.04 },
+];
+
+function ease(t)       { return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
+function lerp(a,b,t)   { return a+(b-a)*t; }
+function clamp(v,a,b)  { return Math.max(a,Math.min(b,v)); }
+function lerpDNA(A,B,t){ const r={}; for(const k of Object.keys(A)) r[k]=lerp(A[k],B[k],t); return r; }
+
+function setFarsi(id,v,d=1) {
+  const e=document.getElementById(id);
+  if(e) e.textContent=toFarsi(v,d);
+}
+function updateEvoEq(dna) {
+  setFarsi('v-ka',dna.ka); setFarsi('v-kx',dna.kx,0); setFarsi('v-ky',dna.ky,0);
+  setFarsi('v-eo',dna.eo); setFarsi('v-dd',dna.dd,0); setFarsi('v-exp',dna.exp);
+  setFarsi('v-qb',dna.qb,0); setFarsi('v-qt',dna.qt); setFarsi('v-ws',dna.ws);
+  setFarsi('v-tr',dna.tr); setFarsi('v-ds',dna.ds); setFarsi('v-ts',dna.ts,0);
+}
+
+function computePoints(dna, tAnim, cx, cy, nPts) {
+  const out=[], EXP=dna.exp;
+  for (let i=0; i<nPts; i++) {
+    const x=i%80, y=i/80;
+    const k  = dna.ka*Math.cos(x/dna.kx)*Math.cos(y/dna.ky);
+    const e  = y/8-dna.eo;
+    const m  = Math.sqrt(k*k+e*e);
+    const d  = Math.pow(m,EXP)/dna.dd+4;
+    const at = Math.atan2(k,e);
+    const q  = dna.qb-dna.qt*Math.sin(at*e);
+    const wv = k*(3+dna.ws/d*Math.sin(d*d-tAnim*dna.tr));
+    const c  = d/2+e/99-tAnim/dna.ts;
+    out.push([(q+wv)*Math.sin(c)*1.35+cx, (q+d*dna.ds)*Math.cos(c)+cy]);
+  }
+  return out;
+}
+
+function headCentroid(pts) {
+  const sorted = pts.slice().sort((a,b)=>a[1]-b[1]);
+  const n = Math.max(1, Math.floor(sorted.length*0.08));
+  let sx=0,sy=0;
+  for (let i=0;i<n;i++) { sx+=sorted[i][0]; sy+=sorted[i][1]; }
+  return {x:sx/n, y:sy/n};
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MATHEMATICAL FORMS — ATTRACTOR + L-SYSTEM DATA
+// ══════════════════════════════════════════════════════════════════
+const MATH_PRESET_HOLD = 20;
+const ACT_ATT   = 100;
+const FADE_12   = 12;
+const ACT_LS    = 60;    // 3 presets × 20s (no Koch)
+const FADE_23   = 12;
+const ACT_COMBO = 60;
+const MATH_TOTAL = ACT_ATT + FADE_12 + ACT_LS + FADE_23 + ACT_COMBO;
+
+const ATT = [
+  { type:'clifford', a:-1.4,  b:1.6,   c:1.0,   d:0.7   },
+  { type:'clifford', a:-1.7,  b:1.3,   c:-0.1,  d:-1.21 },
+  { type:'clifford', a:1.5,   b:-1.8,  c:1.6,   d:0.9   },
+  { type:'dejong',   a:1.4,   b:-2.3,  c:2.4,   d:-2.1  },
+  { type:'dejong',   a:-2.7,  b:-0.9,  c:-0.9,  d:-2.7  },
+];
+
+const LS = [
+  {
+    name:'Fern', axiom:'X',
+    rules:{ X:'F+[[X]-X]-F[-FX]+X', F:'FF' },
+    angle:25, iter:5, len:7, sx:0.5, sy:0.90, startAngle:-90,
+    eqLeft: [
+      { text:'ω', sym:' = ', val:'X' },
+      { text:'δ', sym:' = ', val:'۲۵°' },
+    ],
+    eqRight: [
+      { text:'X', sym:' ↦ ', val:'F·[+[X]−X]·F·[−FX]+X' },
+      { text:'F', sym:' ↦ ', val:'F·F' },
+    ]
+  },
+  {
+    name:'Coral', axiom:'F',
+    rules:{ F:'F[+F]F[-F][F]' },
+    angle:20, iter:5, len:8, sx:0.5, sy:0.90, startAngle:-90,
+    eqLeft: [
+      { text:'ω', sym:' = ', val:'F' },
+      { text:'δ', sym:' = ', val:'۲۰°' },
+    ],
+    eqRight: [
+      { text:'F', sym:' ↦ ', val:'F·[+F]·F·[−F]·[F]' },
+    ]
+  },
+  {
+    name:'Tree', axiom:'F',
+    rules:{ F:'FF-[-F+F+F]+[+F-F-F]' },
+    angle:22.5, iter:4, len:13, sx:0.5, sy:0.94, startAngle:-90,
+    eqLeft: [
+      { text:'ω', sym:' = ', val:'F' },
+      { text:'δ', sym:' = ', val:'۲۲٫۵°' },
+    ],
+    eqRight: [
+      { text:'F', sym:' ↦ ', val:'F·F−[−F+F+F]+[+F−F−F]' },
+    ]
+  },
+];
+
+function expandLS(preset) {
+  let s=preset.axiom;
+  for(let i=0;i<preset.iter;i++){
+    let ns=''; for(const c of s) ns+=preset.rules[c]||c;
+    s=ns; if(s.length>900000) break;
+  }
+  return s;
+}
+
+// ── Math equation rendering (Farsi numerals) ──────────────────────
+function renderMathLines(id, lines, alpha) {
+  const el = document.getElementById(id);
+  el.style.opacity = alpha;
+  el.innerHTML = lines.map(l => {
+    if (l.divider) return `<div class="eq-sub">${l.divider}</div>`;
+    return `<div class="eq-line">
+      <span class="mvar">${l.text||''}</span><span class="msym">${l.sym||''}</span><span class="mval">${l.val||''}</span>
+    </div>`;
+  }).join('');
+}
+
+function showAttEq(pr, alpha) {
+  let left;
+  if(pr.type==='clifford') {
+    left = [
+      { text:'xₙ₊₁', sym:' = sin(', val: toFarsi(pr.a,2)+'·y) + '+toFarsi(pr.c,2)+'·cos('+toFarsi(pr.a,2)+'·x)' },
+      { text:'yₙ₊₁', sym:' = sin(', val: toFarsi(pr.b,2)+'·x) + '+toFarsi(pr.d,2)+'·cos('+toFarsi(pr.b,2)+'·y)' },
+    ];
+  } else {
+    left = [
+      { text:'xₙ₊₁', sym:' = sin(', val: toFarsi(pr.a,2)+'·y) − cos('+toFarsi(pr.b,2)+'·x)' },
+      { text:'yₙ₊₁', sym:' = sin(', val: toFarsi(pr.c,2)+'·x) − cos('+toFarsi(pr.d,2)+'·y)' },
+    ];
+  }
+  renderMathLines('eq-left', left, alpha);
+  renderMathLines('eq-right', [], alpha);
+}
+
+function showLSEq(preset, alpha) {
+  renderMathLines('eq-left',  preset.eqLeft,  alpha);
+  renderMathLines('eq-right', preset.eqRight, alpha);
+}
+
+function clearMathEq() {
+  document.getElementById('eq-left').innerHTML='';
+  document.getElementById('eq-left').style.opacity=0;
+  document.getElementById('eq-right').innerHTML='';
+  document.getElementById('eq-right').style.opacity=0;
+}
+
+function iterAtt(x,y,pr) {
+  if(pr.type==='clifford') return {
+    x:Math.sin(pr.a*y)+pr.c*Math.cos(pr.a*x),
+    y:Math.sin(pr.b*x)+pr.d*Math.cos(pr.b*y)
+  };
+  return {
+    x:Math.sin(pr.a*y)-Math.cos(pr.b*x),
+    y:Math.sin(pr.c*x)-Math.cos(pr.d*y)
+  };
+}
+function lerpAtt(A,B,t){
+  return{type:A.type,a:lerp(A.a,B.a,t),b:lerp(A.b,B.b,t),c:lerp(A.c,B.c,t),d:lerp(A.d,B.d,t)};
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  P5 SKETCH 0: BREATH ORGANISM (25s opener)
+// ══════════════════════════════════════════════════════════════════
+new p5(function(p) {
+  let t = 0, elapsed = 0, fadeClock = 0;
+
+  p.setup = function() {
+    p.createCanvas(window.innerWidth, window.innerHeight).parent('breath-canvas');
+    p.strokeWeight(1);
+  };
+  p.windowResized = function() { p.resizeCanvas(window.innerWidth, window.innerHeight); };
+
+  p.draw = function() {
+    const dt = p.deltaTime / 1000;
+    elapsed += dt;
+
+    // After BREATH_SEC, start fading out and trigger evolution
+    if (elapsed >= BREATH_SEC && !window.evoStarted) {
+      window.evoStarted = true;
+    }
+
+    if (window.evoStarted) {
+      fadeClock += dt;
+      window.breathProgress = Math.max(0, 1 - fadeClock / BREATH_FADE_SEC);
+      window.evoProgress = Math.min(1, fadeClock / BREATH_FADE_SEC);
+    }
+
+    const bp = window.breathProgress;
+    if (bp <= 0) { p.clear(); return; }
+
+    // Equation panel visibility
+    document.getElementById('breath-eq').style.opacity = bp;
+
+    p.background(9, Math.round(255 * bp));
+    t += Math.PI / 20;
+
+    const cx = p.width / 2;
+    const cy = p.height / 2;
+    const sc = Math.min(p.width, p.height) / 400;
+
+    p.stroke(255, Math.round(120 * bp));
+
+    for (let i = 0; i < 10000; i++) {
+      const x = i % 80;
+      const y = i / 43;
+      const k  = 5 * Math.cos(x / 14) * Math.cos(y / 30);
+      const e  = y / 8 - 13;
+      const d  = Math.pow(p.mag(k, e), 2) / 59 + 4;
+      const at = Math.atan2(k, e);
+      const q  = 60 - 3 * Math.sin(at * e);
+      const wv = k * (3 + 4 / d * Math.sin(d * d - t * 2));
+      const c  = d / 2 + e / 99 - t / 18;
+      const px = (q + wv) * Math.sin(c) * sc + cx;
+      const py = (q + d * 9) * Math.cos(c) * sc + cy;
+      p.point(px, py);
+    }
+  };
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  P5 SKETCH 1: EVOLUTION
+// ══════════════════════════════════════════════════════════════════
+new p5(function(p) {
+  let tAnim=0, curSpd=0.06, clock=0, phase='hold', idx=0;
+  let evoElapsed=0, cycle=0, secondCycle=false, insetAlpha=0;
+
+  p.setup = function() {
+    p.createCanvas(window.innerWidth, window.innerHeight).parent('evo-canvas');
+    p.strokeWeight(1);
+    updateEvoEq(animals[0]);
+  };
+  p.windowResized = function() { p.resizeCanvas(window.innerWidth, window.innerHeight); };
+
+  p.draw = function() {
+    const ep = window.evoProgress;
+    if (ep <= 0) { p.clear(); return; }
+
+    const sp = window.slimeProgress;
+    const mp = window.mathProgress;
+
+    // Show evo equation panel when evo is active and slime/math aren't
+    document.getElementById('eq-panel').style.opacity = Math.max(0, ep - sp - mp);
+
+    p.background(0);
+    const dt = p.deltaTime/1000;
+
+    // Only count evo time once fully faded in
+    if (ep >= 1) {
+      clock += dt;
+      evoElapsed += dt;
+    }
+
+    // Trigger slime after SLIME_AFTER_SEC of evolution
+    if (evoElapsed >= SLIME_AFTER_SEC && !window.slimeStarted) {
+      window.slimeStarted = true;
+      window.slimeProgress = 1;  // instant — no fade
+    }
+
+    const next = (idx+1) % animals.length;
+    let dna;
+    if (phase === 'hold') {
+      dna = animals[idx];
+      if (clock >= HOLD_SEC) { clock=0; phase='morph'; }
+    } else {
+      const raw = Math.min(clock/MORPH_SEC, 1);
+      dna = lerpDNA(animals[idx], animals[next], ease(raw));
+      if (raw >= 1) {
+        idx = next; clock = 0; phase = 'hold';
+        if (idx === 0) { cycle++; if(cycle>=1) secondCycle=true; }
+      }
+    }
+
+    if (secondCycle) insetAlpha = Math.min(1, insetAlpha + dt/3);
+
+    curSpd = lerp(curSpd, dna.spd, 0.018);
+    tAnim += curSpd;
+
+    const spread = dna.qb * Math.sqrt(dna.ds);
+    const ref = 177, aS = (spread/ref)*(spread/ref);
+    const nPts = Math.round(Math.min(160000, Math.max(24000, 50000*aS)));
+    const baseA = Math.min(130, Math.max(70, 90*(ref/spread)));
+    const evoA = Math.max(0, ep * (1 - sp));
+
+    const cx = p.width/2, cy = p.height/2;
+    const pts = computePoints(dna, tAnim, cx, cy, nPts);
+
+    p.strokeWeight(1);
+    p.stroke(255, baseA * evoA);
+    for (const [x,y] of pts) p.point(x,y);
+
+    if (secondCycle) {
+      const head = headCentroid(pts);
+      const CAPTURE = 90, ZOOM = 3.5;
+      p.strokeWeight(1);
+      p.stroke(255, baseA * insetAlpha * evoA);
+      for (const [x,y] of pts) {
+        const dx = x-head.x, dy = y-head.y;
+        if (dx*dx + dy*dy > CAPTURE*CAPTURE) continue;
+        p.point(head.x + dx*ZOOM, head.y + dy*ZOOM);
+      }
+    }
+
+    if (p.frameCount%4 === 0) updateEvoEq(dna);
+  };
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  P5 SKETCH 2: SLIME MOLD (instant on, no fade-in)
+// ══════════════════════════════════════════════════════════════════
+new p5(function(p) {
+  const N=2000, SPEED=1.0, SA=30, SD=9, RA=22;
+  let agents=[], slimeElapsed=0, mathFadeClock=0;
+
+  p.setup = function() {
+    p.createCanvas(window.innerWidth, window.innerHeight).parent('slime-canvas');
+    p.angleMode(p.DEGREES);
+    p.pixelDensity(1);
+    p.background(0);
+    for (let i=0; i<N; i++) {
+      agents.push({
+        x: p.width/2 + p.random(-100,100),
+        y: p.height/2 + p.random(-100,100),
+        a: p.random(360)
+      });
+    }
+  };
+  p.windowResized = function() { p.resizeCanvas(window.innerWidth, window.innerHeight); };
+
+  function sense(ag, offset) {
+    const a = ag.a + offset;
+    const sx = Math.round(ag.x + SD*p.cos(a));
+    const sy = Math.round(ag.y + SD*p.sin(a));
+    if (sx<0 || sx>=p.width || sy<0 || sy>=p.height) return 0;
+    return p.pixels[(sy*p.width+sx)*4];
+  }
+
+  p.draw = function() {
+    if (!window.slimeStarted) { p.clear(); return; }
+
+    const dt = p.deltaTime/1000;
+    const sp = window.slimeProgress;
+    if (sp <= 0) { p.clear(); return; }
+
+    // Track how long slime has been visible
+    slimeElapsed += dt;
+
+    // Trigger math phase after 60s of slime
+    if (slimeElapsed >= MATH_AFTER_SLIME && !window.mathStarted) {
+      window.mathStarted = true;
+    }
+
+    // Fade slime OUT when math fades in
+    if (window.mathStarted) {
+      mathFadeClock += dt;
+      const raw = Math.min(1, mathFadeClock / MATH_FADE_SEC);
+      const curved = ease(raw);
+      window.mathProgress  = curved;
+      window.slimeProgress = Math.max(0, 1 - curved);
+    }
+
+    // Ramp trail decay as slime fades
+    const eraseAlpha = Math.round(lerp(10, 60, 1 - sp));
+    p.fill(0, eraseAlpha); p.noStroke(); p.rect(0,0,p.width,p.height);
+    p.loadPixels();
+
+    for (let i=0; i<agents.length; i++) {
+      const ag = agents[i];
+      const F=sense(ag,0), L=sense(ag,-SA), R=sense(ag,SA);
+      if      (F>L && F>R) {}
+      else if (F<L && F<R) { ag.a += p.random([-RA,RA]); }
+      else if (L>R)        { ag.a -= RA; }
+      else if (R>L)        { ag.a += RA; }
+      ag.x += SPEED*p.cos(ag.a);
+      ag.y += SPEED*p.sin(ag.a);
+      if (ag.x<0 || ag.x>=p.width)  { ag.a=180-ag.a; ag.x=p.constrain(ag.x,0,p.width-1); }
+      if (ag.y<0 || ag.y>=p.height) { ag.a=-ag.a;     ag.y=p.constrain(ag.y,0,p.height-1); }
+      const ix=Math.floor(ag.x), iy=Math.floor(ag.y);
+      const i4=(iy*p.width+ix)*4;
+      const br=Math.round(220*sp);
+      p.pixels[i4]=p.pixels[i4+1]=p.pixels[i4+2]=br;
+      p.pixels[i4+3]=Math.round(200*sp);
+    }
+    p.updatePixels();
+  };
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  P5 SKETCH 3: MATHEMATICAL FORMS (ATTRACTORS + L-SYSTEMS)
+// ══════════════════════════════════════════════════════════════════
+new p5(function(p) {
+  let mathElapsed = 0;
+  let attIdx=0, attClock=0, ax=0.1, ay=0.1;
+  let lsIdx=0, lsClock=0, lsStr='', lsProgress=0;
+
+  function initLS(idx) { lsStr = expandLS(LS[idx]); lsProgress = 0; }
+
+  function updateAtt(dt) {
+    attClock += dt;
+    if (attClock >= MATH_PRESET_HOLD) {
+      attClock = 0;
+      attIdx = (attIdx+1) % ATT.length;
+      ax = 0.1; ay = 0.1;
+    }
+  }
+
+  function drawAtt(alpha) {
+    const scale = Math.min(p.width, p.height) * 0.22;
+    const cx = p.width/2, cy = p.height/2;
+    const pct = clamp((attClock - MATH_PRESET_HOLD*0.5) / (MATH_PRESET_HOLD*0.5), 0, 1);
+    const cur = ATT[attIdx], nxt = ATT[(attIdx+1) % ATT.length];
+    const pr = pct > 0 ? lerpAtt(cur, nxt, ease(pct)) : cur;
+    p.stroke(255, clamp(alpha*150, 0, 255));
+    p.strokeWeight(1);
+    for (let i=0; i<120000; i++) {
+      const n = iterAtt(ax, ay, pr); ax = n.x; ay = n.y;
+      const px = Math.round(ax*scale + cx), py = Math.round(ay*scale + cy);
+      if (px>=0 && px<p.width && py>=0 && py<p.height) p.point(px, py);
+    }
+    if (p.frameCount%3 === 0) showAttEq(pr, alpha);
+  }
+
+  function updateLS(dt) {
+    lsClock += dt;
+    lsProgress = clamp(lsProgress + dt/10, 0, 1);
+    if (lsClock >= MATH_PRESET_HOLD && lsIdx < LS.length - 1) {
+      lsClock = 0;
+      lsIdx++;
+      initLS(lsIdx);
+    }
+  }
+
+  function drawLS(alpha) {
+    if (!lsStr || lsProgress<=0) return;
+    const preset = LS[lsIdx];
+    const steps = Math.floor(clamp(lsProgress,0,1) * lsStr.length);
+    if (steps<=0) return;
+    const stack = [];
+    let x=p.width*preset.sx, y=p.height*preset.sy, angle=preset.startAngle;
+    p.stroke(255, alpha*235);
+    p.strokeWeight(0.9);
+    p.noFill();
+    for (let i=0; i<steps; i++) {
+      const c = lsStr[i];
+      if (c==='F') {
+        const nx = x + preset.len*Math.cos(angle*Math.PI/180);
+        const ny = y + preset.len*Math.sin(angle*Math.PI/180);
+        if (nx>-200 && nx<p.width+200 && ny>-200 && ny<p.height+200) p.line(x,y,nx,ny);
+        x=nx; y=ny;
+      } else if (c==='+') { angle+=preset.angle; }
+        else if (c==='-') { angle-=preset.angle; }
+        else if (c==='[') { stack.push({x,y,angle}); }
+        else if (c===']') { const s=stack.pop(); if(s){x=s.x;y=s.y;angle=s.angle;} }
+    }
+    if (p.frameCount%3 === 0) showLSEq(preset, alpha);
+  }
+
+  p.setup = function() {
+    p.createCanvas(window.innerWidth, window.innerHeight).parent('math-canvas');
+    p.pixelDensity(1);
+    initLS(0);
+  };
+  p.windowResized = function() {
+    p.resizeCanvas(window.innerWidth, window.innerHeight);
+    ax=0.1; ay=0.1;
+  };
+
+  p.draw = function() {
+    const mp = window.mathProgress;
+    if (mp <= 0) { p.clear(); clearMathEq(); return; }
+
+    const dt = p.deltaTime/1000;
+    mathElapsed += dt;
+    const e = mathElapsed % MATH_TOTAL;
+
+    const T1 = ACT_ATT;
+    const T2 = T1 + FADE_12;
+    const T3 = T2 + ACT_LS;
+    const T4 = T3 + FADE_23;
+
+    let attA=0, lsA=0;
+
+    if      (e < T1) { attA=1; }
+    else if (e < T2) { const t=ease((e-T1)/FADE_12); attA=1-t; lsA=t; }
+    else if (e < T3) { lsA=1; }
+    else if (e < T4) { const t=ease((e-T3)/FADE_23); lsA=1-t; attA=t; }
+    else             { attA=1; lsA=1; }
+
+    attA *= mp;
+    lsA  *= mp;
+
+    const needsTrail = attA > 0.1;
+    if (needsTrail) { p.background(0, 20); }
+    else            { p.background(0, 255); }
+
+    if (attA > 0) { updateAtt(dt); drawAtt(attA); }
+    if (lsA > 0)  { updateLS(dt);  drawLS(lsA); }
+
+    if (attA > 0.5 && lsA > 0.5) {
+      const pct2 = clamp((attClock - MATH_PRESET_HOLD*0.5) / (MATH_PRESET_HOLD*0.5), 0, 1);
+      const cur = ATT[attIdx], nxt = ATT[(attIdx+1) % ATT.length];
+      const pr = pct2>0 ? lerpAtt(cur, nxt, ease(pct2)) : cur;
+      if (p.frameCount%3 === 0) {
+        showAttEq(pr, attA);
+        renderMathLines('eq-right', LS[lsIdx].eqRight, lsA);
+      }
+    }
+
+    if (attA < 0.05 && lsA < 0.05) clearMathEq();
+  };
+});
+</script>
+</body>
+</html>

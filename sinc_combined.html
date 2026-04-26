@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sinc — from episodes to continuity</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080a;
+    color: #e8e4df;
+    font-family: 'Cormorant Garamond', serif;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .title {
+    position: fixed;
+    top: 2.5rem;
+    left: 3rem;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .title h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 300;
+    font-size: 0.65rem;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: #4a4a55;
+    margin-bottom: 0.4rem;
+  }
+
+  .title h2 {
+    font-weight: 300;
+    font-size: 1.8rem;
+    font-style: italic;
+    color: #908a80;
+    line-height: 1.35;
+  }
+
+  .equation-label {
+    position: fixed;
+    bottom: 2rem;
+    left: 3rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: #2a2a35;
+    letter-spacing: 0.05em;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .phase-info {
+    position: fixed;
+    top: 2.5rem;
+    right: 3rem;
+    text-align: right;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .phase-info .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.25em;
+    color: #3a3a45;
+    text-transform: uppercase;
+  }
+
+  .phase-info .desc {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-style: italic;
+    font-size: 0.95rem;
+    color: #5a5a65;
+    margin-top: 0.2rem;
+  }
+
+  .bottom-text {
+    position: fixed;
+    bottom: 4.5rem;
+    right: 3rem;
+    max-width: 320px;
+    text-align: right;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .bottom-text p {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: #4a4a55;
+    transition: opacity 0.8s ease;
+  }
+
+  .bottom-text em {
+    color: #8a7a6a;
+    font-style: italic;
+  }
+
+  .controls {
+    position: fixed;
+    bottom: 2rem;
+    right: 3rem;
+    display: flex;
+    gap: 0.5rem;
+    z-index: 20;
+  }
+
+  .controls button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid #1e1e28;
+    color: #3e3e4e;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    transition: all 0.4s ease;
+  }
+
+  .controls button:hover {
+    border-color: #4a4a5a;
+    color: #8a8a9a;
+  }
+
+  .controls button.active {
+    border-color: #5a4a3a;
+    color: #c8a882;
+  }
+
+  .scrubber {
+    position: fixed;
+    bottom: 5rem;
+    right: 3rem;
+    left: 3rem;
+    height: 2px;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .scrubber.visible {
+    opacity: 1;
+  }
+
+  .scrubber-track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #1a1a22;
+    cursor: pointer;
+  }
+
+  .scrubber-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 2px;
+    background: #4a3a2a;
+    pointer-events: none;
+    transition: width 0.05s linear;
+  }
+
+  .scrubber-handle {
+    position: absolute;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #c8a882;
+    transform: translateX(-5px);
+    pointer-events: none;
+    transition: left 0.05s linear;
+  }
+
+  .mode-label {
+    position: fixed;
+    bottom: 7.5rem;
+    right: 3rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    color: #2a2a35;
+    text-transform: uppercase;
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .mode-label.visible {
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="title">
+  <h1>sinc</h1>
+  <h2>from episodes to continuity</h2>
+</div>
+
+<div class="phase-info">
+  <div class="num" id="phaseNum">I</div>
+  <div class="desc" id="phaseDesc">discrete episodes</div>
+</div>
+
+<div class="equation-label">f(t) = Σ f(nT) · sinc((t − nT) / T)</div>
+
+<div class="bottom-text">
+  <p id="captionText">isolated moments, <em>pulsing in the dark</em></p>
+</div>
+
+<div class="mode-label" id="modeLabel">manual</div>
+
+<div class="scrubber" id="scrubber">
+  <div class="scrubber-track" id="scrubberTrack"></div>
+  <div class="scrubber-fill" id="scrubberFill"></div>
+  <div class="scrubber-handle" id="scrubberHandle"></div>
+</div>
+
+<div class="controls">
+  <button id="btnEpisodes" onclick="goTo(0)">episodes</button>
+  <button id="btnSinc" onclick="goTo(1)">sinc</button>
+  <button id="btnReconstruct" onclick="goTo(2)">reconstruct</button>
+  <button id="btnPlay" class="active" onclick="togglePlay()">playing</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, dpr;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const d of dust) { d.x = Math.random() * W; d.y = Math.random() * H; }
+}
+window.addEventListener('resize', resize);
+
+// --- Math ---
+function lifeSignal(t) {
+  return 0.32 * Math.sin(0.8 * t)
+       + 0.22 * Math.sin(1.7 * t + 0.5)
+       + 0.18 * Math.sin(3.1 * t + 1.2)
+       + 0.1 * Math.cos(0.3 * t + 2.0)
+       + 0.1 * Math.sin(2.3 * t - 0.8);
+}
+
+function sinc(x) {
+  if (Math.abs(x) < 1e-8) return 1;
+  return Math.sin(Math.PI * x) / (Math.PI * x);
+}
+
+const numSamples = 8;
+const spacing = 1.0;
+const samples = [];
+for (let i = 0; i < numSamples; i++) {
+  const t = (i - numSamples / 2 + 0.5) * spacing;
+  samples.push({ t, value: lifeSignal(t) });
+}
+
+function reconstructed(t) {
+  let sum = 0;
+  for (const s of samples) sum += s.value * sinc((t - s.t) / spacing);
+  return sum;
+}
+
+function singleSinc(t, sample) {
+  return sample.value * sinc((t - sample.t) / spacing);
+}
+
+const tRange = (numSamples * spacing) / 2 + 2.5;
+function mapX(t) { return W / 2 + t * (W / (2 * tRange + 1)); }
+function mapY(v) { return H / 2 - v * H * 0.32; }
+
+// --- Colors ---
+const sampleHues = [25, 42, 58, 140, 175, 210, 255, 305];
+function hsl(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})`; }
+
+// --- Noisy episode particles (cluster around sample points) ---
+const episodeParticles = [];
+for (let si = 0; si < numSamples; si++) {
+  const s = samples[si];
+  const count = 12 + Math.floor(Math.random() * 8);
+  for (let j = 0; j < count; j++) {
+    episodeParticles.push({
+      si,
+      offsetT: (Math.random() - 0.5) * 0.35,
+      offsetV: (Math.random() - 0.5) * 0.08,
+      size: 0.6 + Math.random() * 1.2,
+      phase: Math.random() * Math.PI * 2,
+      orbitSpeed: 0.3 + Math.random() * 0.8,
+      orbitRadius: 5 + Math.random() * 18,
+      alpha: 0.15 + Math.random() * 0.35,
+      hue: sampleHues[si] + (Math.random() - 0.5) * 20,
+    });
+  }
+}
+
+// --- Flowing particles (sinc emanation) ---
+const flowParticles = [];
+const MAX_FLOW = 1200;
+
+function spawnFlow(si) {
+  const s = samples[si];
+  const hue = sampleHues[si];
+  const tOffset = (Math.random() - 0.5) * tRange * 2;
+  flowParticles.push({
+    si,
+    tStart: s.t,
+    tTarget: s.t + tOffset,
+    progress: 0,
+    speed: 0.003 + Math.random() * 0.005,
+    life: 1,
+    decay: 0.0015 + Math.random() * 0.003,
+    size: 0.6 + Math.random() * 1.3,
+    hue: hue + (Math.random() - 0.5) * 15,
+    drift: (Math.random() - 0.5) * 1.5,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+
+// --- Dust ---
+const dust = [];
+for (let i = 0; i < 50; i++) {
+  dust.push({
+    x: Math.random() * 1920,
+    y: Math.random() * 1080,
+    size: 0.3 + Math.random() * 0.7,
+    speed: 0.08 + Math.random() * 0.2,
+    phase: Math.random() * Math.PI * 2,
+    alpha: 0.04 + Math.random() * 0.08,
+  });
+}
+
+// --- State ---
+let time = 0;
+let globalPhase = 0; // 0-3 continuous
+let playing = true;
+let manualTarget = null;
+const PHASE_DURATION = 7;
+const TOTAL_CYCLE = PHASE_DURATION * 3 + 1.5;
+
+const captions = [
+  'isolated moments, <em>pulsing in the dark</em>',
+  'each ripples outward — <em>the early ones dominate</em>',
+  'continuity <em>reconstructed</em>, not imposed',
+];
+const phaseNums = ['I', 'II', 'III'];
+const phaseDescs = ['discrete episodes', 'sinc emanation', 'reconstruction'];
+
+let currentCaption = -1;
+const captionEl = document.getElementById('captionText');
+const phaseNumEl = document.getElementById('phaseNum');
+const phaseDescEl = document.getElementById('phaseDesc');
+const scrubberEl = document.getElementById('scrubber');
+const scrubberFill = document.getElementById('scrubberFill');
+const scrubberHandle = document.getElementById('scrubberHandle');
+const modeLabelEl = document.getElementById('modeLabel');
+const btnPlay = document.getElementById('btnPlay');
+const btnEpisodes = document.getElementById('btnEpisodes');
+const btnSinc = document.getElementById('btnSinc');
+const btnReconstruct = document.getElementById('btnReconstruct');
+
+function updateUI(idx) {
+  if (idx !== currentCaption) {
+    currentCaption = idx;
+    captionEl.style.opacity = 0;
+    setTimeout(() => {
+      captionEl.innerHTML = captions[idx];
+      phaseNumEl.textContent = phaseNums[idx];
+      phaseDescEl.textContent = phaseDescs[idx];
+      captionEl.style.opacity = 1;
+    }, 400);
+  }
+  [btnEpisodes, btnSinc, btnReconstruct].forEach((b, i) => {
+    b.classList.toggle('active', i === idx && !playing);
+  });
+}
+
+function updateScrubber() {
+  const pct = (globalPhase / 3) * 100;
+  scrubberFill.style.width = pct + '%';
+  scrubberHandle.style.left = pct + '%';
+}
+
+function goTo(phase) {
+  playing = false;
+  manualTarget = phase;
+  btnPlay.textContent = 'paused';
+  btnPlay.classList.remove('active');
+  scrubberEl.classList.add('visible');
+  modeLabelEl.classList.add('visible');
+}
+
+function togglePlay() {
+  playing = !playing;
+  if (playing) {
+    manualTarget = null;
+    btnPlay.textContent = 'playing';
+    btnPlay.classList.add('active');
+    scrubberEl.classList.remove('visible');
+    modeLabelEl.classList.remove('visible');
+  } else {
+    btnPlay.textContent = 'paused';
+    btnPlay.classList.remove('active');
+    scrubberEl.classList.add('visible');
+    modeLabelEl.classList.add('visible');
+  }
+}
+
+// Scrubber interaction
+let scrubbing = false;
+document.getElementById('scrubberTrack').addEventListener('mousedown', (e) => {
+  scrubbing = true;
+  handleScrub(e);
+});
+window.addEventListener('mousemove', (e) => { if (scrubbing) handleScrub(e); });
+window.addEventListener('mouseup', () => { scrubbing = false; });
+
+function handleScrub(e) {
+  const rect = document.getElementById('scrubberTrack').getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  globalPhase = pct * 3;
+  manualTarget = null;
+  playing = false;
+  btnPlay.textContent = 'paused';
+  btnPlay.classList.remove('active');
+}
+
+resize();
+
+// --- Draw ---
+function draw() {
+  const dt = 1 / 60;
+  time += dt;
+
+  // Phase progression
+  if (playing) {
+    const cycleTime = time % TOTAL_CYCLE;
+    if (cycleTime < PHASE_DURATION) {
+      globalPhase = cycleTime / PHASE_DURATION;
+    } else if (cycleTime < PHASE_DURATION * 2) {
+      globalPhase = 1 + (cycleTime - PHASE_DURATION) / PHASE_DURATION;
+    } else if (cycleTime < PHASE_DURATION * 3) {
+      globalPhase = 2 + (cycleTime - PHASE_DURATION * 2) / PHASE_DURATION;
+    } else {
+      globalPhase = 3;
+    }
+  } else if (manualTarget !== null) {
+    const target = manualTarget + 0.5;
+    const diff = target - globalPhase;
+    globalPhase += diff * 0.04;
+    if (Math.abs(diff) < 0.01) globalPhase = target;
+  }
+
+  // Update caption
+  if (globalPhase < 1) updateUI(0);
+  else if (globalPhase < 2) updateUI(1);
+  else updateUI(2);
+
+  updateScrubber();
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#08080a';
+  ctx.fillRect(0, 0, W, H);
+
+  const bgGlow = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, H * 0.7);
+  bgGlow.addColorStop(0, 'rgba(18, 16, 22, 0.35)');
+  bgGlow.addColorStop(1, 'rgba(8, 8, 10, 0)');
+  ctx.fillStyle = bgGlow;
+  ctx.fillRect(0, 0, W, H);
+
+  // Baseline
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(mapX(-tRange), mapY(0));
+  ctx.lineTo(mapX(tRange), mapY(0));
+  ctx.stroke();
+
+  // Dust
+  for (const d of dust) {
+    d.x += Math.sin(time * 0.15 + d.phase) * d.speed * 0.4;
+    d.y -= d.speed * 0.12;
+    if (d.y < -5) { d.y = H + 5; d.x = Math.random() * W; }
+    ctx.fillStyle = `rgba(170,165,155,${d.alpha})`;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const steps = Math.floor(W / 2);
+
+  // --- Sinc curves (phase 1-2) ---
+  if (globalPhase > 0.6) {
+    let curveAlpha;
+    if (globalPhase < 1) curveAlpha = (globalPhase - 0.6) * 2.5;
+    else if (globalPhase < 2.4) curveAlpha = 1;
+    else curveAlpha = Math.max(0, (2.8 - globalPhase) * 2.5);
+
+    for (let si = 0; si < samples.length; si++) {
+      const s = samples[si];
+      const hue = sampleHues[si];
+      ctx.strokeStyle = hsl(hue, 18, 45, curveAlpha * 0.1);
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const t = -tRange + (2 * tRange * i) / steps;
+        const v = singleSinc(t, s);
+        const px = mapX(t);
+        const py = mapY(v);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // --- Reconstructed line (phase 2+) ---
+  if (globalPhase > 1.8) {
+    const reconAlpha = Math.min((globalPhase - 1.8) * 2, 1);
+
+    // Glow
+    ctx.strokeStyle = `rgba(200,170,130,${reconAlpha * 0.1})`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = -tRange + (2 * tRange * i) / steps;
+      const v = reconstructed(t);
+      if (i === 0) ctx.moveTo(mapX(t), mapY(v)); else ctx.lineTo(mapX(t), mapY(v));
+    }
+    ctx.stroke();
+
+    // Line
+    ctx.strokeStyle = `rgba(210,185,155,${reconAlpha * 0.65})`;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = -tRange + (2 * tRange * i) / steps;
+      const v = reconstructed(t);
+      if (i === 0) ctx.moveTo(mapX(t), mapY(v)); else ctx.lineTo(mapX(t), mapY(v));
+    }
+    ctx.stroke();
+  }
+
+  // --- Flowing particles (sinc + reconstruct phases) ---
+  if (globalPhase > 0.5 && globalPhase < 3) {
+    const rate = globalPhase < 1 ? 1 : (globalPhase < 2 ? 4 : 2);
+    for (let i = 0; i < rate; i++) {
+      if (flowParticles.length < MAX_FLOW) {
+        spawnFlow(Math.floor(Math.random() * numSamples));
+      }
+    }
+  }
+
+  for (let i = flowParticles.length - 1; i >= 0; i--) {
+    const p = flowParticles[i];
+    const s = samples[p.si];
+    p.progress += p.speed;
+    const tPos = s.t + (p.tTarget - s.t) * Math.min(p.progress, 1);
+
+    let yVal;
+    if (globalPhase < 2) {
+      yVal = singleSinc(tPos, s);
+    } else {
+      const sv = singleSinc(tPos, s);
+      const rv = reconstructed(tPos);
+      const blend = Math.min(globalPhase - 2, 1);
+      yVal = sv * (1 - blend) + rv * blend;
+    }
+
+    const x = mapX(tPos);
+    const y = mapY(yVal) + Math.sin(time * 2.5 + p.phase) * p.drift;
+    p.life -= p.decay;
+
+    if (p.life <= 0 || p.progress > 1.2) { flowParticles.splice(i, 1); continue; }
+
+    const alpha = p.life * 0.6;
+
+    // Glow
+    const gr = p.size * 5;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, gr);
+    g.addColorStop(0, hsl(p.hue, 28, 62, alpha * 0.2));
+    g.addColorStop(1, hsl(p.hue, 28, 62, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, gr, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = hsl(p.hue, 22, 72, alpha);
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- Episode cluster particles (always visible, noisy sampling) ---
+  for (const ep of episodeParticles) {
+    const s = samples[ep.si];
+    const baseX = mapX(s.t + ep.offsetT);
+    const baseY = mapY(s.value + ep.offsetV);
+
+    const angle = time * ep.orbitSpeed + ep.phase;
+    const r = ep.orbitRadius * (0.7 + 0.3 * Math.sin(time * 0.6 + ep.phase));
+    const x = baseX + Math.cos(angle) * r;
+    const y = baseY + Math.sin(angle) * r;
+
+    const pulse = 0.7 + 0.3 * Math.sin(time * 1.2 + ep.phase * 2);
+    const a = ep.alpha * pulse;
+
+    // In reconstruct phase, these migrate slightly toward the reconstructed curve
+    let finalY = y;
+    if (globalPhase > 2) {
+      const reconV = reconstructed(s.t + ep.offsetT);
+      const reconY = mapY(reconV);
+      const blend = Math.min((globalPhase - 2) * 0.5, 0.4);
+      finalY = y * (1 - blend) + reconY * blend;
+    }
+
+    ctx.fillStyle = hsl(ep.hue, 20, 65, a * 0.15);
+    ctx.beginPath();
+    ctx.arc(x, finalY, ep.size * 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = hsl(ep.hue, 20, 70, a);
+    ctx.beginPath();
+    ctx.arc(x, finalY, ep.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- Sample points (always, core dots) ---
+  for (let si = 0; si < samples.length; si++) {
+    const s = samples[si];
+    const x = mapX(s.t);
+    const y = mapY(s.value);
+    const hue = sampleHues[si];
+
+    // Stem
+    ctx.strokeStyle = 'rgba(180,170,155,0.06)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, mapY(0));
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    const breath = 1 + 0.18 * Math.sin(time * 1.3 + si * 0.85);
+    const rad = 3.2 * breath;
+
+    // Large halo
+    const g1 = ctx.createRadialGradient(x, y, 0, x, y, rad * 12);
+    g1.addColorStop(0, hsl(hue, 22, 55, 0.06));
+    g1.addColorStop(0.4, hsl(hue, 22, 55, 0.02));
+    g1.addColorStop(1, hsl(hue, 22, 55, 0));
+    ctx.fillStyle = g1;
+    ctx.beginPath();
+    ctx.arc(x, y, rad * 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Medium glow
+    const g2 = ctx.createRadialGradient(x, y, 0, x, y, rad * 4);
+    g2.addColorStop(0, hsl(hue, 28, 68, 0.2));
+    g2.addColorStop(1, hsl(hue, 28, 68, 0));
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.arc(x, y, rad * 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core
+    ctx.fillStyle = hsl(hue, 25, 75, 0.9);
+    ctx.beginPath();
+    ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hot center
+    ctx.fillStyle = hsl(hue, 12, 92, 0.85);
+    ctx.beginPath();
+    ctx.arc(x, y, rad * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Vignette
+  const vig = ctx.createRadialGradient(W/2, H/2, H * 0.22, W/2, H/2, H * 0.85);
+  vig.addColorStop(0, 'rgba(8,8,10,0)');
+  vig.addColorStop(1, 'rgba(8,8,10,0.55)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+
+</body>
+</html>
